@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}会話一覧 - ChatGPT エクスポートビューア{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4>会話一覧</h4>
+                <span class="badge bg-primary">全 {{ total_conversations }} 件</span>
+            </div>
+            <div class="card-body">
+                <form class="search-form" method="get" action="{{ url_for('index') }}">
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" placeholder="会話を検索..." name="q" value="{{ search_query }}">
+                        <button class="btn btn-outline-secondary" type="submit">検索</button>
+                        {% if search_query %}
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-danger">クリア</a>
+                        {% endif %}
+                    </div>
+                </form>
+
+                {% if conversations %}
+                    <div class="list-group">
+                        {% for conversation in conversations %}
+                        <a href="{{ url_for('view_conversation', conversation_id=conversation.id) }}" class="list-group-item list-group-item-action conversation-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ conversation.title }}</h5>
+                                <small class="text-muted">{{ conversation.message_count }} メッセージ</small>
+                            </div>
+                            <div class="d-flex w-100 justify-content-between">
+                                <small class="text-muted">作成: {{ conversation.create_time_str }}</small>
+                                <small class="text-muted">更新: {{ conversation.update_time_str }}</small>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        {% if search_query %}
+                        検索条件に一致する会話が見つかりませんでした。
+                        {% else %}
+                        会話データが見つかりませんでした。
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <div class="pagination-container">
+                    {{ pagination.links }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 検索フォームの送信時に空白の検索クエリを除去
+    document.querySelector('.search-form').addEventListener('submit', function(e) {
+        const searchInput = this.querySelector('input[name="q"]');
+        if (searchInput.value.trim() === '') {
+            e.preventDefault();
+            window.location.href = "{{ url_for('index') }}";
+        }
+    });
+</script>
+{% endblock %}
