@@ -185,4 +185,4 @@ chatgpt_export/*
 # ただし、.gitkeep ファイルは無視しない (フォルダ構造を維持するため)
 !chatgpt_export/.gitkeep
 
-.vscode
+.vscode/
