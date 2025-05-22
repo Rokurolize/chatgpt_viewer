@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_paginate import Pagination, get_page_parameter
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # DON'T CHANGE THIS !!!
 
@@ -17,6 +18,9 @@ app.config['JSON_AS_ASCII'] = False
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app.config['EXPORT_PATH'] = os.path.join(base_dir, 'chatgpt_export')
 
+# デバッグ用のJSONファイルのパスを格納する変数
+debug_json_file = None
+
 # データキャッシュ
 conversations_cache = None
 conversations_list_cache = None
@@ -25,16 +29,21 @@ CACHE_TIMEOUT = 300  # 5分キャッシュ
 
 def load_conversations():
     """会話データをロードし、キャッシュする"""
-    global conversations_cache, conversations_list_cache, last_load_time
+    global conversations_cache, conversations_list_cache, last_load_time, debug_json_file
     
     current_time = time.time()
-    if conversations_cache is not None and current_time - last_load_time < CACHE_TIMEOUT:
+    # デバッグモードでなく、キャッシュが有効な場合はキャッシュを返す
+    if conversations_cache is not None and conversations_list_cache is not None and current_time - last_load_time < CACHE_TIMEOUT and not debug_json_file:
         return conversations_cache, conversations_list_cache
     
-    conversations_file = os.path.join(app.config['EXPORT_PATH'], 'conversations.json')
-    
-    try:
+    if debug_json_file:
+        conversations_file = debug_json_file
+        print(f"Loading debug conversation from: {conversations_file}")
+    else:
+        conversations_file = os.path.join(app.config['EXPORT_PATH'], 'conversations.json')
         print(f"Loading conversations from: {conversations_file}")
+
+    try:
         print(f"File exists: {os.path.exists(conversations_file)}")
         
         if not os.path.exists(conversations_file):
@@ -43,7 +52,11 @@ def load_conversations():
             return [], []
         
         with open(conversations_file, 'r', encoding='utf-8') as f:
-            conversations = json.load(f)
+            if debug_json_file:
+                # デバッグ時は単一の会話データをリストに格納
+                conversations = [json.load(f)]
+            else:
+                conversations = json.load(f)
         
         # 会話リストを作成（一覧表示用）
         conversations_list = []
@@ -73,6 +86,10 @@ def load_conversations():
         print(f"Error loading conversations: {e}")
         import traceback
         traceback.print_exc()
+        # エラーが発生した場合でも空のリストを返す
+        conversations_cache = []
+        conversations_list_cache = []
+        last_load_time = current_time
         return [], []
 
 def get_conversation_by_id(conversation_id):
@@ -147,8 +164,23 @@ def timestamp_to_datetime(timestamp):
 @app.route('/')
 def index():
     """会話一覧ページ"""
+    global debug_json_file
+    if debug_json_file:
+        # デバッグモードの場合は、特定の会話のみを表示
+        load_conversations() # キャッシュを初期化
+        if conversations_list_cache and conversations_list_cache[0]: # 空でないことを確認
+            conv_id = conversations_list_cache[0]['id']
+            return redirect(url_for('view_conversation', conversation_id=conv_id))
+        else:
+            # デバッグファイルが読み込めなかった場合などのフォールバック
+            return "Error: Could not load debug conversation.", 500
+
     _, conversations_list = load_conversations()
     
+    # conversations_listがNoneでないことを確認
+    if conversations_list is None:
+        conversations_list = []
+
     # 検索機能
     search_query = request.args.get('q', '').strip().lower()
     if search_query:
@@ -203,6 +235,10 @@ def view_conversation(conversation_id):
 def api_conversations():
     """会話一覧API"""
     _, conversations_list = load_conversations()
+
+    # conversations_listがNoneでないことを確認
+    if conversations_list is None:
+        conversations_list = []
     
     # 検索機能
     search_query = request.args.get('q', '').strip().lower()
@@ -245,6 +281,15 @@ def api_conversation(conversation_id):
     })
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='ChatGPT Viewer')
+    parser.add_argument('--debug-load-json', type=str, help='Load a specific JSON file for debugging.')
+    args = parser.parse_args()
+
+    if args.debug_load_json:
+        debug_json_file = args.debug_load_json
+        print(f"--- Debug mode: Loading single conversation from {debug_json_file} ---")
+
+
     # 起動時にパス情報を表示
     print(f"Base directory: {base_dir}")
     print(f"Export path: {app.config['EXPORT_PATH']}")
